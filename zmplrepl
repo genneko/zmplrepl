@@ -216,7 +216,7 @@ zfs_send_recv() {
 	if [ $fullstream -eq 1 ]; then
 		if [ -n "$latest_snap_on_src" ]; then
 			echo "Info: full."
-			echov "Info: ${srchost:+ssh }${srchost}${srchost:+ }zfs send $sendopts${sendopts:+ }$srcds@$latest_snap_on_src | ${dsthost:+ssh }${dsthost}${dsthost:+ }zfs recv $recvopts{$recvopts:+ }$dstds"
+			echov "Info: ${srchost:+ssh }${srchost}${srchost:+ }zfs send $sendopts${sendopts:+ }$srcds@$latest_snap_on_src | ${dsthost:+ssh }${dsthost}${dsthost:+ }zfs recv $recvopts${recvopts:+ }$dstds"
 			echov "==="
 			zfs_send "$srchost" $sendopts $srcds@$latest_snap_on_src | zfs_recv "$dsthost" $recvopts $dstds | sed 's/^/% /' 2>&1 | catv
 			echo_result
