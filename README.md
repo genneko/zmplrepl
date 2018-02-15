@@ -67,7 +67,7 @@ Then send it as a full replication stream to the receiving host.
 ```
   zmplrepl [-nvpiF] [-R] [-f fromSnap] srcDs[@toSnap] [host:]dstDs(base)
   zmplrepl [-nvpiF] -s [-f fromSnap] srcDs[@toSnap] [host:]dstDs
-  zmplrepl [-gh]
+  zmplrepl [-h]
 
   -n: Dry-run (zfs send -nv).
   -v: Be verbose.
@@ -90,6 +90,5 @@ Then send it as a full replication stream to the receiving host.
           -> 'zroot/data/a/b/c' is replicated to r's 'backup/c'.
         zmplrepl zroot/data/x/y/z r:backup
           -> 'zroot/data/x/y/z' is replicated to r's 'backup/data/x/y/z'.
-  -g: Show quick guide and exit.
   -h: Show this usage and exit.
 ```

@@ -3,62 +3,7 @@
 PROG=$(basename $0)
 BINDIR=$(dirname $(readlink -f $0))
 LOCKFILE="$BINDIR/$PROG.lck"
-
 DESCRIPTION="[SZ]imple ZFS Replicator"
-QUICKGUIDE="$PROG - $DESCRIPTION
-[QUICK GUIDE]
-NOTE: Currently this program supports push-based replication only.
-
-Assume you want to replicate zroot/data and all descendant datasets on
-the sending host to the receiving host's backup/data such like:
-
-  [sender(s)]          [receiver(r)]
-  zroot/data       --> backup/data
-  zroot/data/doc   --> backup/data/doc
-  zroot/data/photo --> backup/data/photo
-  zroot/data/video --> backup/data/video
-
-You can achieve this by taking the following steps.
-
-  1. Create a dedicated user on both sending and receiving hosts.
-     It's optional but recommended in production environment.
-
-  2. Generate a SSH public key for the sending user.
-     Then put it into the receiving user's ~/.ssh/authorized_keys.
-
-  3. Create a base dataset with -u (unmounted) on the receiving host.
-     If you are using property-based backup solution such as zfstools,
-     you might want to explicitly disable it on the dataset.
-
-     r$ sudo zfs create -u backup/data
-     r$ sudo zfs set com.sun:auto-snapshot=false backup/data
- 
-  4. Grant appropriate permissions on the source/destination dataset to
-     the sending and receiving users.
-
-     s$ sudo zfs allow -u sender send,snapshot,hold zroot/data
-     r$ sudo zfs allow -u receiver receive,create,mount,mountpoint,compression,recordsize backup/data
-
-  5. Take an initial snapshot on the sending host.
-     Then send it as a full replication stream to the receiving host.
-
-     s$ zfs snapshot -r zroot/data@first
-     s$ zmplrepl -R zroot/data r:backup
-
-  6. Afterwards, run the same command without -R again to synchronize.
-
-     s$ ./zmplrepl zroot/data r:backup
-
-  7. If you want to mount the replicated datasets on the receiving host,
-     run the following command.
-
-     r$ zfs list -o name -H -r backup/data | sudo xargs -n1 zfs mount
-
-     Optionally, you can make the datasets readonly to keep someone
-     from accidentally changing their contents.
-
-     r$ sudo zfs set readonly=on backup/data
-" # END-QUOTE
 
 _lock() {
 	if ! ln -s $$ $LOCKFILE > /dev/null 2>&1; then
@@ -117,12 +62,6 @@ err_exit() {
 usage_exit() {
 	_msg "$1"
 	echoerr "$USAGE"
-	err_exit
-}
-
-guide_exit() {
-	_msg "$1"
-	echoerr "$QUICKGUIDE"
 	err_exit
 }
 
@@ -343,7 +282,7 @@ USAGE="$PROG - $DESCRIPTION
 [USAGE]
   $PROG [-nvpiF] [-R] [-f fromSnap] srcDs[@toSnap] [host:]dstDs(base)
   $PROG [-nvpiF] -s [-f fromSnap] srcDs[@toSnap] [host:]dstDs
-  $PROG [-gh]
+  $PROG [-h]
 
   -n: Dry-run (zfs send -nv).
   -v: Be verbose.
@@ -366,7 +305,6 @@ USAGE="$PROG - $DESCRIPTION
 	  -> 'zroot/data/a/b/c' is replicated to r's 'backup/c'.
 	$PROG zroot/data/x/y/z r:backup
 	  -> 'zroot/data/x/y/z' is replicated to r's 'backup/data/x/y/z'.
-  -g: Show quick guide and exit.
   -h: Show this usage and exit.
 " # END-QUOTE
 
@@ -379,7 +317,7 @@ fullstream=0
 fromsnap=
 recursive=1
 replication=0
-while getopts "nvpiFf:sRgh" opt
+while getopts "nvpiFf:sRh" opt
 do
 	case "$opt" in
 		n) DRYRUN="DRYRUN" ;;
@@ -390,7 +328,6 @@ do
 		f) fromsnap="$OPTARG" ;;
 		s) recursive=0 ;;
 		R) replication=1 ; recursive=0 ;;
-		g) guide_exit ;;
 		h) usage_exit ;;
 		*) usage_exit ;;
 	esac
