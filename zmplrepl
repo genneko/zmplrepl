@@ -1,0 +1,460 @@
+#!/bin/sh
+# vim: ft=sh
+PROG=$(basename $0)
+BINDIR=$(dirname $(readlink -f $0))
+LOCKFILE="$BINDIR/$PROG.lck"
+
+DESCRIPTION="[SZ]imple ZFS Replicator"
+QUICKGUIDE="$PROG - $DESCRIPTION
+[QUICK GUIDE]
+NOTE: Currently this program supports push-based replication only.
+
+Assume you want to replicate zroot/data and all descendant datasets on
+the sending host to the receiving host's backup/data such like:
+
+  [sender(s)]          [receiver(r)]
+  zroot/data       --> backup/data
+  zroot/data/doc   --> backup/data/doc
+  zroot/data/photo --> backup/data/photo
+  zroot/data/video --> backup/data/video
+
+You can achieve this by taking the following steps.
+
+  1. Create a dedicated user on both sending and receiving hosts.
+     It's optional but recommended in production environment.
+
+  2. Generate a SSH public key for the sending user.
+     Then put it into the receiving user's ~/.ssh/authorized_keys.
+
+  3. Create a base dataset with -u (unmounted) on the receiving host.
+     If you are using property-based backup solution such as zfstools,
+     you might want to explicitly disable it on the dataset.
+
+     r$ sudo zfs create -u backup/data
+     r$ sudo zfs set com.sun:auto-snapshot=false backup/data
+ 
+  4. Grant appropriate permissions on the source/destination dataset to
+     the sending and receiving users.
+
+     s$ sudo zfs allow -u sender send,snapshot,hold zroot/data
+     r$ sudo zfs allow -u receiver receive,create,mount,mountpoint,compression,recordsize backup/data
+
+  5. Take an initial snapshot on the sending host.
+     Then send it as a full replication stream to the receiving host.
+
+     s$ zfs snapshot -r zroot/data@first
+     s$ zmplrepl -R zroot/data r:backup
+
+  6. Afterwards, run the same command without -R again to synchronize.
+
+     s$ ./zmplrepl zroot/data r:backup
+
+  7. If you want to mount the replicated datasets on the receiving host,
+     run the following command.
+
+     r$ zfs list -o name -H -r backup/data | sudo xargs -n1 zfs mount
+
+     Optionally, you can make the datasets readonly to keep someone
+     from accidentally changing their contents.
+
+     r$ sudo zfs set readonly=on backup/data
+" # END-QUOTE
+
+_lock() {
+	if ! ln -s $$ $LOCKFILE > /dev/null 2>&1; then
+		return 1
+	else
+		trap '_unlock; exit 1' 1 2 3 11 15
+		return 0
+	fi
+}
+
+_unlock() {
+	rm -f $LOCKFILE
+	rm -f $TF_SRCSNAP $TF_DSTSNAP
+	trap 1 2 3 11 15
+}
+
+_mktemp() {
+	local name=$1
+	local tmpfile
+	if [ -n "$name" ]; then
+		mktemp -q -t "$name"
+	fi
+}
+
+catv() {
+	if [ $VERBOSE -eq 1 ]; then
+		cat
+	else
+		cat >/dev/null
+	fi
+}
+
+echov() {
+	if [ $VERBOSE -eq 1 ]; then
+		echo "$@"
+	fi
+}
+
+echoerr() {
+	echo "$@" >&2
+}
+
+_msg() {
+	local msg="$1"
+	if [ -n "$msg" ]; then
+		echoerr "$msg"
+	fi
+}
+
+err_exit() {
+	_msg "$1"
+	_unlock
+	exit 1
+}
+
+usage_exit() {
+	_msg "$1"
+	echoerr "$USAGE"
+	err_exit
+}
+
+guide_exit() {
+	_msg "$1"
+	echoerr "$QUICKGUIDE"
+	err_exit
+}
+
+echo_result() {
+	local status=$?
+	if [ -z "$DRYRUN" ]; then
+		if [ $status = 0 ]; then
+			echo "Info: SUCCESS"
+		else
+			echoerr "Error: Status=$status"
+		fi
+	fi
+}
+
+run_command() {
+	local host=$1
+	shift
+	if [ -n "$host" ]; then
+		ssh $host "$@"
+	else
+		"$@"
+	fi
+}
+
+list_ds() {
+	local host=$1
+	local ds=$2
+	local recursive=$3
+	if [ -n "$ds" ]; then
+		if [ $recursive -eq 1 ]; then
+			run_command "$host" zfs list -o name -H -t filesystem -r $ds 2>/dev/null
+		else
+			echo $ds
+		fi
+	fi
+}
+
+list_snap() {
+	local host=$1
+	local ds=$2
+	if [ -n "$ds" ]; then
+		run_command "$host" zfs list -o name -H -t snapshot -r $ds | fgrep $ds@ | sed -e 's/.*@//'
+	fi
+}
+
+zfs_send() {
+	local host=$1
+	shift
+	run_command "$host" zfs send "$@"
+}
+
+zfs_recv() {
+	local host=$1
+	shift
+	if [ -n "$DRYRUN" ]; then
+		cat
+	else
+		run_command "$host" zfs receive "$@"
+	fi
+}
+
+get_full_dstds() {
+	local srcds=$1
+	local dstds=$2
+	local recursive=$3
+	local replication=$4
+	local full_dstds
+
+	if [ $recursive -eq 1 -o $replication -eq 1 ]; then
+		# If -s is not specified, dstDs is a base dataset.
+		full_dstds="$dstds/${srcds#*/}"
+	else
+		# If -s is specified, dstDs is already a full path dataset.
+		full_dstds="$dstds"
+	fi
+	echo "$full_dstds"
+}
+
+get_snap_ts() {
+	local host=$1
+	local fullsnap=$2
+	if [ -n "$fullsnap" ]; then
+		run_command "$host" zfs get -p -o value -H creation $fullsnap 2>/dev/null
+	fi
+}
+
+zfs_send_recv() {
+	local srchost=$1
+	local srcds=$2
+	local fromsnap=$3
+	local tosnap=$4
+	local dsthost=$5
+	local dstds=$6
+	local recursive=$7
+	local replication=$8
+	local fullstream=$9
+
+	local sendopts recvopts
+	local latest_common_snap latest_snap_on_dst latest_snap_on_src
+	local oldest_snap_on_dst oldest_snap_on_src
+
+	local full_dstds=$(get_full_dstds "$srcds" "$dstds" "$recursive" "$replication")
+	echo 
+	echo "--------------------"
+	echo "Info: src=[$srchost${srchost:+:}$srcds]"
+	echo -n "Info: dst=[$dsthost${dsthost:+:}$full_dstds]"
+	if [ "$dstds" != "$full_dstds" ]; then
+		echo    " <- [$dsthost${dsthost:+:}$dstds]"
+	else
+		echo
+	fi
+	test -n "$DRYRUN" && echo "Info: $DRYRUN"
+	list_snap "$dsthost" "$full_dstds" > "$TF_DSTSNAP" 2>/dev/null
+	list_snap "$srchost" "$srcds" > "$TF_SRCSNAP" 2>/dev/null
+
+	latest_common_snap=$(fgrep -x -f $TF_SRCSNAP $TF_DSTSNAP | tail -n 1)
+	latest_snap_on_dst=$(tail -n 1 $TF_DSTSNAP)
+	latest_snap_on_src=$(tail -n 1 $TF_SRCSNAP)
+	oldest_snap_on_dst=$(head -n 1 $TF_DSTSNAP)
+	oldest_snap_on_src=$(head -n 1 $TF_SRCSNAP)
+
+	if [ -z "$oldest_snap_on_dst" ]; then
+		echov "Info: No dataset on the receiver. Turn on -F (full)."
+		fullstream=1
+	elif [ -z "$latest_common_snap" ]; then
+		echov "Info: No common snapshot. Turn on -F (full)."
+		fullstream=1
+	fi
+
+	if [ -n "$fromsnap" ]; then
+		latest_common_snap="$fromsnap"
+	fi
+	if [ -n "$tosnap" ]; then
+		latest_snap_on_src="$tosnap"
+	fi
+
+	sendopts=""
+	recvopts="-Fuvs"
+	if [ $replication -eq 1 ]; then
+		sendopts="${sendopts}${sendopts:+ }-R"
+		recvopts="${recvopts}${recvopts:+ }-d"
+	elif [ $recursive -eq 1 ]; then
+		recvopts="${recvopts}${recvopts:+ }-d"
+	fi
+	if [ -n "$DRYRUN" ]; then
+		sendopts="${sendopts}${sendopts:+ }-nv"
+	fi
+	if [ $PRESERVEPROP -eq 1 ]; then
+		sendopts="${sendopts}${sendopts:+ }-p"
+	fi
+
+	if [ $fullstream -eq 1 ]; then
+		if [ -n "$latest_snap_on_src" ]; then
+			echo "Info: full."
+			echov "Info: ${srchost:+ssh }${srchost}${srchost:+ }zfs send $sendopts${sendopts:+ }$srcds@$latest_snap_on_src | ${dsthost:+ssh }${dsthost}${dsthost:+ }zfs recv $recvopts{$recvopts:+ }$dstds"
+			echov "==="
+			zfs_send "$srchost" $sendopts $srcds@$latest_snap_on_src | zfs_recv "$dsthost" $recvopts $dstds | sed 's/^/% /' 2>&1 | catv
+			echo_result
+		else
+			echoerr  "Error: No snapshot for full stream on the sender."
+		fi
+	else
+		if [ -n "$latest_common_snap" ]; then
+			if [ $SPARSEMODE -eq 1 ]; then
+				sendopts="${sendopts}${sendopts:+ }-i"
+				incrtype="incremental (-i)"
+			else
+				sendopts="${sendopts}${sendopts:+ }-I"
+				incrtype="incremental (-I)"
+			fi
+			common_snap_ts=$(get_snap_ts "$srchost" $srcds@$latest_common_snap)
+			latest_snap_ts=$(get_snap_ts "$srchost" $srcds@$latest_snap_on_src)
+
+			echov "Info: Latest common snap = $latest_common_snap ($common_snap_ts)"
+			echov "Info: Latest snap on src = $latest_snap_on_src ($latest_snap_ts)"
+			echov "Info: Latest snap on dst = $latest_snap_on_dst"
+
+
+			if [ $common_snap_ts -lt $latest_snap_ts ]; then
+				echo "Info: common($common_snap_ts) < latest($latest_snap_ts) -> $incrtype"
+				echov "Info: ${srchost:+ssh }${srchost}${srchost:+ }zfs send $sendopts${sendopts:+ }$latest_common_snap $srcds@$latest_snap_on_src | ${dsthost:+ssh }${dsthost}${dsthost:+ }zfs recv $recvopts${recvopts:+ }$dstds"
+				echov "==="
+				zfs_send "$srchost" $sendopts $latest_common_snap $srcds@$latest_snap_on_src | zfs_recv "$dsthost" $recvopts $dstds | sed 's/^/% /' 2>&1 | catv
+				echo_result
+
+			elif [ $common_snap_ts -eq $latest_snap_ts ]; then
+				echo "Info: common($common_snap_ts) = latest($latest_snap_ts) -> Already in sync."
+				echo "Info: NOTHING TO DO"
+
+			else
+				echoerr "Error: common($common_snap_ts) > latest($latest_snap_ts) -> Oops! Weird."
+			fi
+		else
+			echoerr "Error: No common snapshot for incremental send."
+		fi
+	fi
+}
+
+parse_target() {
+	t_origtarget=$1
+	if echo "$t_origtarget" | fgrep -q ':'; then
+		t_hostname=${t_origtarget%%:*}
+		t_fullpath=${t_origtarget#*:}
+	else
+		t_hostname=
+		t_fullpath=${t_origtarget}
+	fi
+	if echo "$t_fullpath" | fgrep -q '@'; then
+		t_dataset=${t_fullpath%%@*}
+		t_snapshot=${t_fullpath#*@}
+	else
+		t_dataset=${t_fullpath}
+		t_snapshot=
+	fi
+}
+
+USAGE="$PROG - $DESCRIPTION
+[USAGE]
+  $PROG [-nvpiF] [-R] [-f fromSnap] srcDs[@toSnap] [host:]dstDs(base)
+  $PROG [-nvpiF] -s [-f fromSnap] srcDs[@toSnap] [host:]dstDs
+  $PROG [-gh]
+
+  -n: Dry-run (zfs send -nv).
+  -v: Be verbose.
+  -p: Preserve properties on sender (zfs send -p). -R implies -p.
+  -i: Use sparse mode (zfs send -i) when sending incremental stream.
+  -F: Force full stream.
+      By default, $PROG sends incremental stream if both sender and
+      receiver have a common snapshot, while $PROG sends full stream
+      if there is no common snapshot for both sides.
+  -R: Send full replication stream (zfs send -R) based on the srcDs.
+      By default, $PROG sends indivudual stream for each dataset
+      under the srcDs.
+  -f: Specify a fromSnap for incremental stream.
+      By default, the latest common snapshot for both sides are used.
+  -s: Use one-to-one stream. Set dstDs to a absolute destination dataset
+      path for the srcDs when using -s.
+      Otherwise, dstDs should be the base dataset for replication.
+      Here are some examples.
+        $PROG -s zroot/data/a/b/c r:backup/c
+	  -> 'zroot/data/a/b/c' is replicated to r's 'backup/c'.
+	$PROG zroot/data/x/y/z r:backup
+	  -> 'zroot/data/x/y/z' is replicated to r's 'backup/data/x/y/z'.
+  -g: Show quick guide and exit.
+  -h: Show this usage and exit.
+" # END-QUOTE
+
+CMDLINE="$PROG $@"
+DRYRUN=
+VERBOSE=0
+PRESERVEPROP=0
+SPARSEMODE=0
+fullstream=0
+fromsnap=
+recursive=1
+replication=0
+while getopts "nvpiFf:sRgh" opt
+do
+	case "$opt" in
+		n) DRYRUN="DRYRUN" ;;
+		v) VERBOSE=1 ;;
+		p) PRESERVEPROP=1 ;;
+		i) SPARSEMODE=1 ;;
+		F) fullstream=1 ;;
+		f) fromsnap="$OPTARG" ;;
+		s) recursive=0 ;;
+		R) replication=1 ; recursive=0 ;;
+		g) guide_exit ;;
+		h) usage_exit ;;
+		*) usage_exit ;;
+	esac
+done
+shift $(( $OPTIND - 1 ))
+
+_srcds_tosnap=$1
+_target=$2
+
+parse_target "$_srcds_tosnap"
+srchost=$t_hostname
+srcds=$t_dataset
+tosnap=$t_snapshot
+
+parse_target "$_target"
+dsthost=$t_hostname
+dstds=$t_dataset
+
+if [ -z "$srcds" -o -z "$dstds" ]; then
+	usage_exit
+fi
+
+#
+# main
+#
+if ! _lock; then
+	err_exit "Error: Another process seems to be running."
+fi
+
+TF_SRCSNAP=$(_mktemp srcsnap) && TF_DSTSNAP=$(_mktemp dstsnap)
+if [ $? -ne 0 ]; then
+	err_exit "Error: Cannot create temporary files."
+fi
+
+SRCDS_LIST=$(list_ds "$srchost" $srcds $recursive)
+if [ -z "$SRCDS_LIST" ]; then
+	err_exit "Error: No such srcDs [$srcds]${srchost:+ on}${srchost}."
+fi
+
+BEGINTS=$(date '+%s')
+HR_BEGINTS=$(date -j -f '%s' $BEGINTS '+%Y%m%d-%H%M%S')
+
+echo "# BEGIN"
+echo "# ---------- ${PROG} ----------"
+echo "# started  at ${HR_BEGINTS} ($BEGINTS)"
+echo "# ---------- ${PROG} ----------"
+echo "# CMDLINE=[$CMDLINE]"
+echo "#"
+
+for each_srcds in $SRCDS_LIST; do
+	zfs_send_recv "$srchost" "$each_srcds" "$fromsnap" "$tosnap" "$dsthost" "$dstds" $recursive $replication $fullstream
+done
+
+ENDTS=$(date '+%s')
+HR_ENDTS=$(date -j -f '%s' $ENDTS '+%Y%m%d-%H%M%S')
+
+echo
+echo "#"
+echo "# ---------- ${PROG} ----------"
+echo "# started  at ${HR_BEGINTS} ($BEGINTS)"
+echo "# finished at ${HR_ENDTS} ($ENDTS)"
+echo "# total time = $(expr $ENDTS - $BEGINTS) secs."
+echo "# ---------- ${PROG} ----------"
+echo "# END"
+
+_unlock
+exit 0
