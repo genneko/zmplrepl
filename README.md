@@ -11,7 +11,7 @@ $ git clone https://github.com/genneko/zmplrepl.git
 ```
 
 ## Quick Guide
-Assume you want to replicate zroot/data and all descendant datasets on the sending host to the receiving host's backup/data such like:
+Assume you want to replicate zroot/data and all its descendant datasets on the sending host to the receiving host's backup/data.
 ```
   [sender(s)]          [receiver(r)]
   zroot/data       --> backup/data
