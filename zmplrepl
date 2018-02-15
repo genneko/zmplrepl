@@ -208,7 +208,7 @@ zfs_send_recv() {
 	fi
 	if [ -n "$DRYRUN" ]; then
 		sendopts="${sendopts}${sendopts:+ }-nv"
-	elif [ -n "$VERBOSE" ]; then
+	elif [ $VERBOSE -eq 1 ]; then
 		sendopts="${sendopts}${sendopts:+ }-v"
 	fi
 	if [ $PRESERVEPROP -eq 1 ]; then
