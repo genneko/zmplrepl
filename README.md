@@ -29,10 +29,8 @@ It's optional but recommended in production environment.
 Then put it into the receiving user's ~/.ssh/authorized_keys.
 
 3. Create a base dataset with -u (unmounted) on the receiving host.  
-If you are using property-based backup solution such as zfstools, you might want to explicitly disable it on the dataset.
     ```
     repl@r$ sudo zfs create -u backup/data
-    repl@r$ sudo zfs set com.sun:auto-snapshot=false backup/data
     ```
 
 4. Grant appropriate permissions on the source/destination dataset to the sending and receiving users.
@@ -48,8 +46,9 @@ Then send it as a full replication stream to the receiving host.
     repl@s$ zmplrepl -R zroot/data r:backup
     ```
 
-6. Afterwards, run the same command without -R again to synchronize.
+6. Afterwards, run zmplrepl again without -R after taking a snapshot.
     ```
+    repl@s$ zfs snapshot -r zroot/data@second
     repl@s$ zmplrepl zroot/data r:backup
     ```
 
@@ -67,14 +66,14 @@ Then send it as a full replication stream to the receiving host.
 
 ## Usage
 ```
-  zmplrepl [-nvpiF] [-R] [-f fromSnap] srcDs[@toSnap] [host:]dstDs(base)
-  zmplrepl [-nvpiF] -s [-f fromSnap] srcDs[@toSnap] [host:]dstDs
+  zmplrepl [-nvpIF] [-R] [-f fromSnap] srcDs[@toSnap] [host:]dstDs(base)
+  zmplrepl [-nvpIF] -s [-f fromSnap] srcDs[@toSnap] [host:]dstDs
   zmplrepl [-h]
 
   -n: Dry-run (zfs send -nv).
   -v: Be verbose. Can specify as -vv to be more verbose (zfs send -v).
   -p: Preserve properties on sender (zfs send -p). -R implies -p.
-  -i: Use sparse mode (zfs send -i) when sending incremental stream.
+  -I: Use dense mode (zfs send -I) when sending incremental stream.
   -F: Force full stream.
       By default, zmplrepl sends incremental stream if both sender and
       receiver have a common snapshot, while zmplrepl sends full stream

@@ -227,12 +227,12 @@ zfs_send_recv() {
 		fi
 	else
 		if [ -n "$latest_common_snap" ]; then
-			if [ $SPARSEMODE -eq 1 ]; then
-				sendopts="${sendopts}${sendopts:+ }-i"
-				incrtype="incremental (-i)"
-			else
+			if [ $DENSEMODE -eq 1 ]; then
 				sendopts="${sendopts}${sendopts:+ }-I"
 				incrtype="incremental (-I)"
+			else
+				sendopts="${sendopts}${sendopts:+ }-i"
+				incrtype="incremental (-i)"
 			fi
 			common_snap_ts=$(get_snap_ts "$srchost" $srcds@$latest_common_snap)
 			latest_snap_ts=$(get_snap_ts "$srchost" $srcds@$latest_snap_on_src)
@@ -282,14 +282,14 @@ parse_target() {
 
 USAGE="$PROG - $DESCRIPTION
 [USAGE]
-  $PROG [-nvpiF] [-R] [-f fromSnap] srcDs[@toSnap] [host:]dstDs(base)
-  $PROG [-nvpiF] -s [-f fromSnap] srcDs[@toSnap] [host:]dstDs
+  $PROG [-nvpIF] [-R] [-f fromSnap] srcDs[@toSnap] [host:]dstDs(base)
+  $PROG [-nvpIF] -s [-f fromSnap] srcDs[@toSnap] [host:]dstDs
   $PROG [-h]
 
   -n: Dry-run (zfs send -nv).
   -v: Be verbose. Can specify as -vv to be more verbose (zfs send -v).
   -p: Preserve properties on sender (zfs send -p). -R implies -p.
-  -i: Use sparse mode (zfs send -i) when sending incremental stream.
+  -I: Use dense mode (zfs send -I) when sending incremental stream.
   -F: Force full stream.
       By default, $PROG sends incremental stream if both sender and
       receiver have a common snapshot, while $PROG sends full stream
@@ -314,18 +314,18 @@ CMDLINE="$PROG $@"
 DRYRUN=
 VERBOSE=0
 PRESERVEPROP=0
-SPARSEMODE=0
+DENSEMODE=0
 fullstream=0
 fromsnap=
 recursive=1
 replication=0
-while getopts "nvpiFf:sRh" opt
+while getopts "nvpIFf:sRh" opt
 do
 	case "$opt" in
 		n) DRYRUN="DRYRUN" ;;
 		v) VERBOSE=$(expr $VERBOSE + 1) ;;
 		p) PRESERVEPROP=1 ;;
-		i) SPARSEMODE=1 ;;
+		I) DENSEMODE=1 ;;
 		F) fullstream=1 ;;
 		f) fromsnap="$OPTARG" ;;
 		s) recursive=0 ;;
