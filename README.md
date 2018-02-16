@@ -84,9 +84,9 @@ Then send it as a full replication stream to the receiving host.
       under the srcDs.
   -f: Specify a fromSnap for incremental stream.
       By default, the latest common snapshot for both sides are used.
-  -s: Use one-to-one stream. Set dstDs to a absolute destination dataset
-      path for the srcDs when using -s.
-      Otherwise, dstDs should be the base dataset for replication.
+  -s: Use one-to-one stream. When using -s, specify an absolute dataset
+      path for the dstDs which corresponds to the srcDs. Otherwise,
+      dstDs should be the base (container) dataset for a replication.
       Here are some examples.
         zmplrepl -s zroot/data/a/b/c r:backup/c
           -> 'zroot/data/a/b/c' is replicated to r's 'backup/c'.
