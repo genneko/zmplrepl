@@ -99,11 +99,20 @@ list_ds() {
 	fi
 }
 
+filter_re() {
+	local re=$1
+	if [ -n "$re" ]; then
+		grep -E "$re"
+	else
+		cat
+	fi
+}
+
 list_snap() {
 	local host=$1
 	local ds=$2
 	if [ -n "$ds" ]; then
-		run_command "$host" zfs list -o name -H -t snapshot -r $ds | fgrep $ds@ | sed -e 's/.*@//'
+		run_command "$host" zfs list -o name -H -t snapshot -r $ds | fgrep $ds@ | sed -e 's/.*@//' | filter_re "$SNAPFILTER"
 	fi
 }
 
@@ -282,8 +291,8 @@ parse_target() {
 
 USAGE="$PROG - $DESCRIPTION
 [USAGE]
-  $PROG [-nvpIF] [-R] [-f fromSnap] srcDs[@toSnap] [host:]dstDs(base)
-  $PROG [-nvpIF] -s [-f fromSnap] srcDs[@toSnap] [host:]dstDs
+  $PROG [-nvpIFRz] [-S RE] [-f fromSnap] srcDs[@toSnap] [host:]dstDs(base)
+  $PROG [-nvpIFz] -s [-S RE] [-f fromSnap] srcDs[@toSnap] [host:]dstDs
   $PROG [-h]
 
   -n: Dry-run (zfs send -nv).
@@ -297,6 +306,8 @@ USAGE="$PROG - $DESCRIPTION
   -R: Send full replication stream (zfs send -R) based on the srcDs.
       By default, $PROG sends indivudual stream for each dataset
       under the srcDs.
+  -S: Specify an extended regular expression to filter snapshot list.
+  -z: Short-hand for -S \"zfs-auto-snap_(daily|weekly|monthly)\".
   -f: Specify a fromSnap for incremental stream.
       By default, the latest common snapshot for both sides are used.
   -s: Use one-to-one stream. When using -s, specify an absolute dataset
@@ -315,17 +326,20 @@ DRYRUN=
 VERBOSE=0
 PRESERVEPROP=0
 DENSEMODE=0
+SNAPFILTER=
 fullstream=0
 fromsnap=
 recursive=1
 replication=0
-while getopts "nvpIFf:sRh" opt
+while getopts "nvpIS:zFf:sRh" opt
 do
 	case "$opt" in
 		n) DRYRUN="DRYRUN" ;;
 		v) VERBOSE=$(expr $VERBOSE + 1) ;;
 		p) PRESERVEPROP=1 ;;
 		I) DENSEMODE=1 ;;
+		S) SNAPFILTER="$OPTARG" ;;
+		z) SNAPFILTER="zfs-auto-snap_(daily|weekly|monthly)" ;;
 		F) fullstream=1 ;;
 		f) fromsnap="$OPTARG" ;;
 		s) recursive=0 ;;

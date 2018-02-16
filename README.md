@@ -66,8 +66,8 @@ Then send it as a full replication stream to the receiving host.
 
 ## Usage
 ```
-  zmplrepl [-nvpIF] [-R] [-f fromSnap] srcDs[@toSnap] [host:]dstDs(base)
-  zmplrepl [-nvpIF] -s [-f fromSnap] srcDs[@toSnap] [host:]dstDs
+  zmplrepl [-nvpIFRz] [-S RE] [-f fromSnap] srcDs[@toSnap] [host:]dstDs(base)
+  zmplrepl [-nvpIFz] -s [-S RE] [-f fromSnap] srcDs[@toSnap] [host:]dstDs
   zmplrepl [-h]
 
   -n: Dry-run (zfs send -nv).
@@ -81,6 +81,8 @@ Then send it as a full replication stream to the receiving host.
   -R: Send full replication stream (zfs send -R) based on the srcDs.
       By default, zmplrepl sends indivudual stream for each dataset
       under the srcDs.
+  -S: Specify an extended regular expression to filter snapshot list.
+  -z: Short-hand for -S \"zfs-auto-snap_(daily|weekly|monthly)\".
   -f: Specify a fromSnap for incremental stream.
       By default, the latest common snapshot for both sides are used.
   -s: Use one-to-one stream. When using -s, specify an absolute dataset
