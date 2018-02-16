@@ -38,7 +38,7 @@ If you are using property-based backup solution such as zfstools, you might want
 4. Grant appropriate permissions on the source/destination dataset to the sending and receiving users.
     ```
     repl@s$ sudo zfs allow -u repl send,snapshot,hold zroot/data
-    repl@r$ sudo zfs allow -u repl receive,create,mount,mountpoint,compression,recordsize backup/data
+    repl@r$ sudo zfs allow -u repl receive,create,mount,mountpoint,compression,recordsize,atime,canmount backup/data
     ```
 
 5. Take an initial snapshot on the sending host.  
@@ -53,8 +53,10 @@ Then send it as a full replication stream to the receiving host.
     repl@s$ zmplrepl zroot/data r:backup
     ```
 
-7. If you want to mount the replicated datasets on the receiving host, run the following command.
+7. If you want to mount the replicated datasets on the receiving host, run the following command after examing and correcting properties such as mountpoint.
     ```
+    repl@r$ zfs list -o name,mountpoint -r backup/data
+    repl@r$ zfs set mountpoint=... (If required)
     repl@r$ zfs list -o name -H -r backup/data | sudo xargs -n1 zfs mount
     ```
 
@@ -70,7 +72,7 @@ Then send it as a full replication stream to the receiving host.
   zmplrepl [-h]
 
   -n: Dry-run (zfs send -nv).
-  -v: Be verbose.
+  -v: Be verbose. Can specify as -vv to be more verbose (zfs send -v).
   -p: Preserve properties on sender (zfs send -p). -R implies -p.
   -i: Use sparse mode (zfs send -i) when sending incremental stream.
   -F: Force full stream.

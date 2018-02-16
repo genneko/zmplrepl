@@ -16,7 +16,7 @@ _lock() {
 
 _unlock() {
 	rm -f $LOCKFILE
-	rm -f $TF_SRCSNAP $TF_DSTSNAP
+	rm -f $TF_SRCSNAP $TF_DSTSNAP $TF_CMDLIST
 	trap 1 2 3 11 15
 }
 
@@ -29,7 +29,7 @@ _mktemp() {
 }
 
 catv() {
-	if [ $VERBOSE -eq 1 ]; then
+	if [ $VERBOSE -ge 1 ]; then
 		cat
 	else
 		cat >/dev/null
@@ -37,7 +37,7 @@ catv() {
 }
 
 echov() {
-	if [ $VERBOSE -eq 1 ]; then
+	if [ $VERBOSE -ge 1 ]; then
 		echo "$@"
 	fi
 }
@@ -208,7 +208,7 @@ zfs_send_recv() {
 	fi
 	if [ -n "$DRYRUN" ]; then
 		sendopts="${sendopts}${sendopts:+ }-nv"
-	elif [ $VERBOSE -eq 1 ]; then
+	elif [ $VERBOSE -ge 2 ]; then
 		sendopts="${sendopts}${sendopts:+ }-v"
 	fi
 	if [ $PRESERVEPROP -eq 1 ]; then
@@ -218,9 +218,9 @@ zfs_send_recv() {
 	if [ $fullstream -eq 1 ]; then
 		if [ -n "$latest_snap_on_src" ]; then
 			echo "Info: full."
-			echov "Info: ${srchost:+ssh }${srchost}${srchost:+ }zfs send $sendopts${sendopts:+ }$srcds@$latest_snap_on_src | ${dsthost:+ssh }${dsthost}${dsthost:+ }zfs recv $recvopts${recvopts:+ }$dstds"
+			echo "Info: ${srchost:+ssh }${srchost}${srchost:+ }zfs send $sendopts${sendopts:+ }$srcds@$latest_snap_on_src | ${dsthost:+ssh }${dsthost}${dsthost:+ }zfs recv $recvopts${recvopts:+ }$dstds" | tee -a $TF_CMDLIST
 			echov "==="
-			zfs_send "$srchost" $sendopts $srcds@$latest_snap_on_src | zfs_recv "$dsthost" $recvopts $dstds | sed 's/^/% /' 2>&1 | catv
+			zfs_send "$srchost" $sendopts $srcds@$latest_snap_on_src | zfs_recv "$dsthost" $recvopts $dstds | sed -u 's/^/% /' 2>&1 | catv
 			echo_result
 		else
 			echoerr  "Error: No snapshot for full stream on the sender."
@@ -244,9 +244,9 @@ zfs_send_recv() {
 
 			if [ $common_snap_ts -lt $latest_snap_ts ]; then
 				echo "Info: common($common_snap_ts) < latest($latest_snap_ts) -> $incrtype"
-				echov "Info: ${srchost:+ssh }${srchost}${srchost:+ }zfs send $sendopts${sendopts:+ }$latest_common_snap $srcds@$latest_snap_on_src | ${dsthost:+ssh }${dsthost}${dsthost:+ }zfs recv $recvopts${recvopts:+ }$dstds"
+				echo "Info: ${srchost:+ssh }${srchost}${srchost:+ }zfs send $sendopts${sendopts:+ }$latest_common_snap $srcds@$latest_snap_on_src | ${dsthost:+ssh }${dsthost}${dsthost:+ }zfs recv $recvopts${recvopts:+ }$dstds" | tee -a $TF_CMDLIST
 				echov "==="
-				zfs_send "$srchost" $sendopts $latest_common_snap $srcds@$latest_snap_on_src | zfs_recv "$dsthost" $recvopts $dstds | sed 's/^/% /' 2>&1 | catv
+				zfs_send "$srchost" $sendopts $latest_common_snap $srcds@$latest_snap_on_src | zfs_recv "$dsthost" $recvopts $dstds | sed -u 's/^/% /' 2>&1 | catv
 				echo_result
 
 			elif [ $common_snap_ts -eq $latest_snap_ts ]; then
@@ -287,7 +287,7 @@ USAGE="$PROG - $DESCRIPTION
   $PROG [-h]
 
   -n: Dry-run (zfs send -nv).
-  -v: Be verbose.
+  -v: Be verbose. Can specify as -vv to be more verbose (zfs send -v).
   -p: Preserve properties on sender (zfs send -p). -R implies -p.
   -i: Use sparse mode (zfs send -i) when sending incremental stream.
   -F: Force full stream.
@@ -323,7 +323,7 @@ while getopts "nvpiFf:sRh" opt
 do
 	case "$opt" in
 		n) DRYRUN="DRYRUN" ;;
-		v) VERBOSE=1 ;;
+		v) VERBOSE=$(expr $VERBOSE + 1) ;;
 		p) PRESERVEPROP=1 ;;
 		i) SPARSEMODE=1 ;;
 		F) fullstream=1 ;;
@@ -359,7 +359,7 @@ if ! _lock; then
 	err_exit "Error: Another process seems to be running."
 fi
 
-TF_SRCSNAP=$(_mktemp srcsnap) && TF_DSTSNAP=$(_mktemp dstsnap)
+TF_SRCSNAP=$(_mktemp srcsnap) && TF_DSTSNAP=$(_mktemp dstsnap) && TF_CMDLIST=$(_mktemp cmdlist)
 if [ $? -ne 0 ]; then
 	err_exit "Error: Cannot create temporary files."
 fi
@@ -373,11 +373,11 @@ BEGINTS=$(date '+%s')
 HR_BEGINTS=$(date -j -f '%s' $BEGINTS '+%Y%m%d-%H%M%S')
 
 echo "# BEGIN"
+echo "#"
+echo "# CMDLINE=[$CMDLINE]"
 echo "# ---------- ${PROG} ----------"
 echo "# started  at ${HR_BEGINTS} ($BEGINTS)"
 echo "# ---------- ${PROG} ----------"
-echo "# CMDLINE=[$CMDLINE]"
-echo "#"
 
 for each_srcds in $SRCDS_LIST; do
 	zfs_send_recv "$srchost" "$each_srcds" "$fromsnap" "$tosnap" "$dsthost" "$dstds" $recursive $replication $fullstream
@@ -387,12 +387,16 @@ ENDTS=$(date '+%s')
 HR_ENDTS=$(date -j -f '%s' $ENDTS '+%Y%m%d-%H%M%S')
 
 echo
-echo "#"
+sed -u 's/^Info: //' < "$TF_CMDLIST"
+echo
+
 echo "# ---------- ${PROG} ----------"
 echo "# started  at ${HR_BEGINTS} ($BEGINTS)"
 echo "# finished at ${HR_ENDTS} ($ENDTS)"
 echo "# total time = $(expr $ENDTS - $BEGINTS) secs."
 echo "# ---------- ${PROG} ----------"
+echo "# CMDLINE=[$CMDLINE]"
+echo "#"
 echo "# END"
 
 _unlock
