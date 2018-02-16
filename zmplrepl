@@ -2,7 +2,7 @@
 # vim: ft=sh
 PROG=$(basename $0)
 BINDIR=$(dirname $(readlink -f $0))
-LOCKFILE="$BINDIR/$PROG.lck"
+LOCKFILE="${TMPDIR:-/tmp}/$PROG.lck"
 DESCRIPTION="[SZ]imple ZFS Replicator"
 
 _lock() {
