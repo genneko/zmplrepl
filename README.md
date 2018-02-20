@@ -2,7 +2,7 @@
 [SZ]imple ZFS Replicator
 
 ## Install
-Install this program on sending and receiving hosts.
+Install this program on both sending and receiving hosts.
 
 1. Clone this repo in a directory of your choice.
     ```
@@ -73,9 +73,9 @@ Then send it as a full replication stream to the receiving host.
 
 ## Usage
 ```
-zmplrepl [-nvpIFRz] [-k KEY_BASE] [-S RE]
+zmplrepl [-nvpIFRz] [-k KEYFILE] [-S RE]
          [-f fromSnap] srcDs[@toSnap] [host:]dstDs(base)
-zmplrepl [-nvpIFz] -s [-k KEY_BASE] [-S RE]
+zmplrepl [-nvpIFz] -s [-k KEYFILE] [-S RE]
          [-f fromSnap] srcDs[@toSnap] [host:]dstDs
 zmplrepl [-h]
 

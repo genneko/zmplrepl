@@ -305,9 +305,9 @@ parse_target() {
 
 USAGE="$PROG - $DESCRIPTION
 [USAGE]
-$PROG [-nvpIFRz] [-k KEY_BASE] [-S RE]
+$PROG [-nvpIFRz] [-k KEYFILE] [-S RE]
          [-f fromSnap] srcDs[@toSnap] [host:]dstDs(base)
-$PROG [-nvpIFz] -s [-k KEY_BASE] [-S RE]
+$PROG [-nvpIFz] -s [-k KEYFILE] [-S RE]
          [-f fromSnap] srcDs[@toSnap] [host:]dstDs
 $PROG [-h]
 
