@@ -2,13 +2,20 @@
 [SZ]imple ZFS Replicator
 
 ## Install
-Clone this repo in a directory of your choice. Optionally, add the cloned directory to your $PATH.
-```
-$ cd ~/app
-$ git clone git@github.com:genneko/zmplrepl.git
-or
-$ git clone https://github.com/genneko/zmplrepl.git
-```
+Install this program on sending and receiving hosts.
+
+1. Clone this repo in a directory of your choice.
+    ```
+    $ cd ~/app
+    $ git clone git@github.com:genneko/zmplrepl.git
+    or
+    $ git clone https://github.com/genneko/zmplrepl.git
+    ```
+
+2. Add the cloned directory to your $PATH.
+    ```
+    PATH="$PATH:$HOME/app/zmplrepl"
+    ```
 
 ## Quick Guide
 Assume you want to replicate zroot/data and all its descendant datasets on the sending host to the receiving host's backup/data.
@@ -66,9 +73,11 @@ Then send it as a full replication stream to the receiving host.
 
 ## Usage
 ```
-  zmplrepl [-nvpIFRz] [-S RE] [-f fromSnap] srcDs[@toSnap] [host:]dstDs(base)
-  zmplrepl [-nvpIFz] -s [-S RE] [-f fromSnap] srcDs[@toSnap] [host:]dstDs
-  zmplrepl [-h]
+zmplrepl [-nvpIFRz] [-k KEY_BASE] [-S RE]
+         [-f fromSnap] srcDs[@toSnap] [host:]dstDs(base)
+zmplrepl [-nvpIFz] -s [-k KEY_BASE] [-S RE]
+         [-f fromSnap] srcDs[@toSnap] [host:]dstDs
+zmplrepl [-h]
 
   -n: Dry-run (zfs send -nv).
   -v: Be verbose. Can specify as -vv to be more verbose (zfs send -v).
@@ -82,7 +91,8 @@ Then send it as a full replication stream to the receiving host.
       By default, zmplrepl sends indivudual stream for each dataset
       under the srcDs.
   -S: Specify an extended regular expression to filter snapshot list.
-  -z: Short-hand for -S \"zfs-auto-snap_(daily|weekly|monthly)\".
+  -z: Short-hand for -S "zfs-auto-snap_(daily|weekly|monthly)".
+  -k: Specify a SSH private key to run zmplhelper on the receiving host.
   -f: Specify a fromSnap for incremental stream.
       By default, the latest common snapshot for both sides are used.
   -s: Use one-to-one stream. When using -s, specify an absolute dataset
@@ -90,8 +100,8 @@ Then send it as a full replication stream to the receiving host.
       dstDs should be the base (container) dataset for a replication.
       Here are some examples.
         zmplrepl -s zroot/data/a/b/c r:backup/c
-          -> 'zroot/data/a/b/c' is replicated to r's 'backup/c'.
-        zmplrepl zroot/data/x/y/z r:backup
-          -> 'zroot/data/x/y/z' is replicated to r's 'backup/data/x/y/z'.
+	  -> 'zroot/data/a/b/c' is replicated to r's 'backup/c'.
+	zmplrepl zroot/data/x/y/z r:backup
+	  -> 'zroot/data/x/y/z' is replicated to r's 'backup/data/x/y/z'.
   -h: Show this usage and exit.
 ```
