@@ -4,9 +4,7 @@ PROG=$(basename $0)
 BINDIR=$(dirname $(readlink -f $0))
 
 zfs_recv() {
-	local opts=$1
-	local ds=$2
-	zfs receive "$opts" "$ds"
+	zfs receive "$@"
 }
 
 list_snap() {
@@ -36,9 +34,7 @@ shift
 
 case "$cmd" in
 	zfs_recv)
-		opts=$1
-		ds=$2
-		zfs_recv "$opts" "$ds"
+		zfs_recv "$@"
 		;;
 	list_snap)
 		ds=$1
