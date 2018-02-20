@@ -1,0 +1,47 @@
+#!/bin/sh
+# vim: ft=sh
+PROG=$(basename $0)
+BINDIR=$(dirname $(readlink -f $0))
+
+zfs_recv() {
+	shift
+	zfs receive "$@"
+}
+
+list_snap() {
+	local ds=$1
+	if [ -n "$ds" ]; then
+		zfs list -o name -H -t snapshot -r $ds | fgrep $ds@ | sed -e 's/.*@//'
+	fi
+}
+
+while getopts "s" opt
+do
+	case "$opt" in
+		s)
+			set -- $SSH_ORIGINAL_COMMAND
+			progname=$1
+			shift
+			if [ "$PROG" != "$progname" ]; then
+				exit 1
+			fi
+			;;
+	esac
+done
+shift $(( $OPTIND - 1 ))
+
+cmd=$1
+shift
+
+case "$cmd" in
+	zfs_recv)
+		opts=$1
+		ds=$2
+		zfs_recv "$opts" "$ds"
+		;;
+	list_snap)
+		ds=$1
+		list_snap "$ds"
+		;;
+esac
+
