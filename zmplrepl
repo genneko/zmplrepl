@@ -412,6 +412,7 @@ echo "# ---------- ${PROG} ----------"
 echo "# started  at ${HR_BEGINTS} ($BEGINTS)"
 echo "# ---------- ${PROG} ----------"
 
+export PATH="$PATH:$BINDIR"
 for each_srcds in $SRCDS_LIST; do
 	zfs_send_recv "$srchost" "$each_srcds" "$fromsnap" "$tosnap" "$dsthost" "$dstds" $recursive $replication $fullstream
 done
