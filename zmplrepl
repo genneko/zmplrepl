@@ -84,7 +84,7 @@ run_command() {
 		case "$opt" in
 			k)
 				if [ -n "$OPTARG" ]; then
-					sshopts="-i $OPTARG"
+					sshopts="-i $OPTARG -o IdentitiesOnly=yes -o BatchMode=yes"
 				fi
 				;;
 		esac
