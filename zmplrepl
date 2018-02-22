@@ -77,10 +77,24 @@ echo_result() {
 }
 
 run_command() {
+	local OPTIND
+	local sshopts
+	while getopts "k:" opt
+	do
+		case "$opt" in
+			k)
+				if [ -n "$OPTARG" ]; then
+					sshopts="-i $OPTARG -o IdentitiesOnly=yes -o BatchMode=yes"
+				fi
+				;;
+		esac
+	done
+	shift $(( $OPTIND - 1 ))
+
 	local host=$1
 	shift
 	if [ -n "$host" ]; then
-		ssh $host "$@"
+		ssh ${sshopts} $host "$@"
 	else
 		"$@"
 	fi
@@ -108,11 +122,11 @@ filter_re() {
 	fi
 }
 
-list_snap() {
+u_list_snap() {
 	local host=$1
 	local ds=$2
 	if [ -n "$ds" ]; then
-		run_command "$host" zfs list -o name -H -t snapshot -r $ds | fgrep $ds@ | sed -e 's/.*@//' | filter_re "$SNAPFILTER"
+		run_command -k "$SSHKEY" "$host" zmplhelper list_snap $ds
 	fi
 }
 
@@ -122,13 +136,13 @@ zfs_send() {
 	run_command "$host" zfs send "$@"
 }
 
-zfs_recv() {
+u_zfs_recv() {
 	local host=$1
 	shift
 	if [ -n "$DRYRUN" ]; then
 		cat
 	else
-		run_command "$host" zfs receive "$@"
+		run_command -k "$SSHKEY" "$host" zmplhelper zfs_recv "$@"
 	fi
 }
 
@@ -183,8 +197,8 @@ zfs_send_recv() {
 		echo
 	fi
 	test -n "$DRYRUN" && echo "Info: $DRYRUN"
-	list_snap "$dsthost" "$full_dstds" > "$TF_DSTSNAP" 2>/dev/null
-	list_snap "$srchost" "$srcds" > "$TF_SRCSNAP" 2>/dev/null
+	u_list_snap "$dsthost" "$full_dstds" | filter_re "$SNAPFILTER" > "$TF_DSTSNAP" 2>/dev/null
+	u_list_snap "$srchost" "$srcds" | filter_re "$SNAPFILTER" > "$TF_SRCSNAP" 2>/dev/null
 
 	latest_common_snap=$(fgrep -x -f $TF_SRCSNAP $TF_DSTSNAP | tail -n 1)
 	latest_snap_on_dst=$(tail -n 1 $TF_DSTSNAP)
@@ -229,7 +243,7 @@ zfs_send_recv() {
 			echo "Info: full."
 			echo "Info: ${srchost:+ssh }${srchost}${srchost:+ }zfs send $sendopts${sendopts:+ }$srcds@$latest_snap_on_src | ${dsthost:+ssh }${dsthost}${dsthost:+ }zfs recv $recvopts${recvopts:+ }$dstds" | tee -a $TF_CMDLIST
 			echov "==="
-			zfs_send "$srchost" $sendopts $srcds@$latest_snap_on_src | zfs_recv "$dsthost" $recvopts $dstds | sed -u 's/^/% /' 2>&1 | catv
+			zfs_send "$srchost" $sendopts $srcds@$latest_snap_on_src | u_zfs_recv "$dsthost" $recvopts $dstds | sed -u 's/^/% /' 2>&1 | catv
 			echo_result
 		else
 			echoerr  "Error: No snapshot for full stream on the sender."
@@ -255,7 +269,7 @@ zfs_send_recv() {
 				echo "Info: common($common_snap_ts) < latest($latest_snap_ts) -> $incrtype"
 				echo "Info: ${srchost:+ssh }${srchost}${srchost:+ }zfs send $sendopts${sendopts:+ }$latest_common_snap $srcds@$latest_snap_on_src | ${dsthost:+ssh }${dsthost}${dsthost:+ }zfs recv $recvopts${recvopts:+ }$dstds" | tee -a $TF_CMDLIST
 				echov "==="
-				zfs_send "$srchost" $sendopts $latest_common_snap $srcds@$latest_snap_on_src | zfs_recv "$dsthost" $recvopts $dstds | sed -u 's/^/% /' 2>&1 | catv
+				zfs_send "$srchost" $sendopts $latest_common_snap $srcds@$latest_snap_on_src | u_zfs_recv "$dsthost" $recvopts $dstds | sed -u 's/^/% /' 2>&1 | catv
 				echo_result
 
 			elif [ $common_snap_ts -eq $latest_snap_ts ]; then
@@ -291,9 +305,11 @@ parse_target() {
 
 USAGE="$PROG - $DESCRIPTION
 [USAGE]
-  $PROG [-nvpIFRz] [-S RE] [-f fromSnap] srcDs[@toSnap] [host:]dstDs(base)
-  $PROG [-nvpIFz] -s [-S RE] [-f fromSnap] srcDs[@toSnap] [host:]dstDs
-  $PROG [-h]
+$PROG [-nvpIFRz] [-k KEYFILE] [-S RE]
+         [-f fromSnap] srcDs[@toSnap] [host:]dstDs(base)
+$PROG [-nvpIFz] -s [-k KEYFILE] [-S RE]
+         [-f fromSnap] srcDs[@toSnap] [host:]dstDs
+$PROG [-h]
 
   -n: Dry-run (zfs send -nv).
   -v: Be verbose. Can specify as -vv to be more verbose (zfs send -v).
@@ -308,6 +324,7 @@ USAGE="$PROG - $DESCRIPTION
       under the srcDs.
   -S: Specify an extended regular expression to filter snapshot list.
   -z: Short-hand for -S \"zfs-auto-snap_(daily|weekly|monthly)\".
+  -k: Specify a SSH private key to run zmplhelper on the receiving host.
   -f: Specify a fromSnap for incremental stream.
       By default, the latest common snapshot for both sides are used.
   -s: Use one-to-one stream. When using -s, specify an absolute dataset
@@ -326,18 +343,20 @@ DRYRUN=
 VERBOSE=0
 PRESERVEPROP=0
 DENSEMODE=0
+SSHKEY=
 SNAPFILTER=
 fullstream=0
 fromsnap=
 recursive=1
 replication=0
-while getopts "nvpIS:zFf:sRh" opt
+while getopts "nvpIk:S:zFf:sRh" opt
 do
 	case "$opt" in
 		n) DRYRUN="DRYRUN" ;;
 		v) VERBOSE=$(expr $VERBOSE + 1) ;;
 		p) PRESERVEPROP=1 ;;
 		I) DENSEMODE=1 ;;
+		k) SSHKEY="${OPTARG}" ;;
 		S) SNAPFILTER="$OPTARG" ;;
 		z) SNAPFILTER="zfs-auto-snap_(daily|weekly|monthly)" ;;
 		F) fullstream=1 ;;
@@ -393,6 +412,7 @@ echo "# ---------- ${PROG} ----------"
 echo "# started  at ${HR_BEGINTS} ($BEGINTS)"
 echo "# ---------- ${PROG} ----------"
 
+export PATH="$PATH:$BINDIR"
 for each_srcds in $SRCDS_LIST; do
 	zfs_send_recv "$srchost" "$each_srcds" "$fromsnap" "$tosnap" "$dsthost" "$dstds" $recursive $replication $fullstream
 done
