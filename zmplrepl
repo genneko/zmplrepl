@@ -100,19 +100,6 @@ run_command() {
 	fi
 }
 
-list_ds() {
-	local host=$1
-	local ds=$2
-	local recursive=$3
-	if [ -n "$ds" ]; then
-		if [ $recursive -eq 1 ]; then
-			run_command "$host" zfs list -o name -H -t filesystem -r "$ds" 2>/dev/null
-		else
-			echo "$ds"
-		fi
-	fi
-}
-
 filter_re() {
 	local re=$1
 	if [ -n "$re" ]; then
@@ -127,6 +114,19 @@ u_list_snap() {
 	local ds=$2
 	if [ -n "$ds" ]; then
 		run_command -k "$SSHKEY" "$host" zmplhelper list_snap "$ds"
+	fi
+}
+
+u_list_ds() {
+	local host=$1
+	local ds=$2
+	local recursive=$3
+	local opts
+	if [ $recursive -eq 1 ]; then
+		opts="-r"
+	fi
+	if [ -n "$ds" ]; then
+		run_command -k "$SSHKEY" "$host" zmplhelper list_ds $opts "$ds"
 	fi
 }
 
@@ -397,7 +397,7 @@ if [ $? -ne 0 ]; then
 	err_exit "Error: Cannot create temporary files."
 fi
 
-SRCDS_LIST=$(list_ds "$srchost" "$srcds" $recursive)
+SRCDS_LIST=$(u_list_ds "$srchost" "$srcds" $recursive)
 if [ -z "$SRCDS_LIST" ]; then
 	err_exit "Error: No such srcDs [$srcds]${srchost:+ on}${srchost}."
 fi

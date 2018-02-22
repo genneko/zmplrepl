@@ -45,6 +45,11 @@ Then put it into the receiving user's ~/.ssh/authorized_keys.
     repl@s$ sudo zfs allow -u repl send,snapshot,hold zroot/data
     repl@r$ sudo zfs allow -u repl receive,create,mount,mountpoint,compression,recordsize,atime,canmount backup/data
     ```
+    Also, these operations can be done with the zmplhelper utility.
+    ```
+    repl@s$ zmplhelper grant sender zroot/data
+    repl@r$ zmplhelper grant receiver zroot/data
+    ```
 
 5. Take an initial snapshot on the sending host.  
 Then send it as a full replication stream to the receiving host.
@@ -66,6 +71,11 @@ Then send it as a full replication stream to the receiving host.
     repl@r$ zfs list -o name -H -r backup/data | sudo xargs -n1 zfs mount
     ```
 
+    'zfs list' in the last line can be replaced with the zmplhelper utility.
+    ```
+    repl@r$ zmplhelper list_ds backup/data | sudo xargs -n1 zfs mount
+    ```
+
     Optionally, you can make the datasets readonly to keep someone from accidentally changing their contents.
     ```
     repl@r$ sudo zfs set readonly=on backup/data
@@ -74,7 +84,7 @@ Then send it as a full replication stream to the receiving host.
 ## Automation
 - Sample authorized_keys on the receiving host.
     ```
-    restrict,from="sender",command="/home/replicator/app/zmplrepl/zmplhelper -s" ssh-rsa AAAA.... replicator@receiver
+    restrict,from="sender",command="/home/repl/app/zmplrepl/zmplhelper -s" ssh-rsa AAAA.... repl@r
     ```
 
 - Sample crontab entry for the sending host.
@@ -82,10 +92,11 @@ Then send it as a full replication stream to the receiving host.
     #
     #Minute hour mday month wday user        command
     #
-    42      0    *    *     *    replicator  /home/replicator/app/zmplrepl/zmplrepl -k /home/replicator/.ssh/id_rsa_zmplhelper_receiver -Rv zroot/data r:backup
+    42      0    *    *     *    repl  /home/repl/app/zmplrepl/zmplrepl -k /home/repl/.ssh/id_rsa_zmplhelper_receiver -Rv zroot/data r:backup
     ```
 
 ## Usage
+### zmplrepl
 ```
 zmplrepl [-nvpIFRz] [-k KEYFILE] [-S RE]
          [-f fromSnap] srcDs[@toSnap] [host:]dstDs(base)
@@ -118,4 +129,13 @@ zmplrepl [-h]
 	zmplrepl zroot/data/x/y/z r:backup
 	  -> 'zroot/data/x/y/z' is replicated to r's 'backup/data/x/y/z'.
   -h: Show this usage and exit.
+```
+
+### zmplhelper
+```
+zmplhelper zfs_recv PARAMETERS...
+zmplhelper list_snap DATASET
+zmplhelper list_ds [-r] DATASET
+zmplhelper grant sender [-u USER] DATASET
+zmplhelper grant receiver [-u USER] DATASET
 ```

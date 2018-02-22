@@ -3,6 +3,21 @@
 PROG=$(basename $0)
 BINDIR=$(dirname $(readlink -f $0))
 
+echoerr() {
+	echo "$@" >&2
+}
+
+usage_exit() {
+	echoerr "[USAGE]"
+	echoerr "$PROG zfs_recv PARAMETERS..."
+	echoerr "$PROG list_snap DATASET"
+	echoerr "$PROG list_ds [-r] DATASET"
+	echoerr "$PROG grant sender [-u USER] DATASET"
+	echoerr "$PROG grant receiver [-u USER] DATASET"
+	echoerr
+	exit 1
+}
+
 zfs_recv() {
 	zfs receive "$@"
 }
@@ -12,6 +27,87 @@ list_snap() {
 	if [ -n "$ds" ]; then
 		zfs list -o name -H -t snapshot -r "$ds" | fgrep "$ds@" | sed -e 's/.*@//'
 	fi
+}
+
+list_ds() {
+	local OPTIND
+	local recursive=0
+	while getopts "r" opt
+	do
+		case "$opt" in
+			r)
+				recursive=1
+				;;
+		esac
+	done
+	shift $(( $OPTIND - 1 ))
+
+	local ds=$1
+	if [ -n "$ds" ]; then
+		if [ $recursive -eq 1 ]; then
+			zfs list -o name -H -t filesystem -r "$ds"
+		else
+			echo "$ds"
+		fi
+	fi
+}
+
+confirm() {
+	local msg=$1
+	local answer
+	if [ -n "$msg" ]; then
+		echo "$msg"
+	fi
+	echo -n "OK? (y/N): "
+	read answer
+	case "$answer" in
+		[yY]*)
+			return 0
+			;;
+		*)
+			return 1
+			;;
+	esac
+}
+
+grant() {
+	local OPTIND
+	local user answer
+	while getopts "u:" opt
+	do
+		case "$opt" in
+			u)
+				user="$OPTARG"
+				;;
+		esac
+	done
+	shift $(( $OPTIND - 1 ))
+
+	local privilege=$1
+	local ds=$2
+	if [ -z "$user" ]; then
+		user=$(whoami)
+		if [ -z "$user" ]; then
+			echoerr "Error: don't know who to grant privileges."
+			exit 1
+		fi
+	fi
+	if [ -z "$privilege" -o -z "$ds" ]; then
+		usage_exit
+	fi
+	case "$privilege" in
+		sender)
+			echo sudo zfs allow -u "$user" send,snapshot,hold "$ds"
+			confirm && sudo zfs allow -u "$user" send,snapshot,hold "$ds"
+			;;
+		receiver)
+			echo sudo zfs allow -u "$user" receive,create,mount,mountpoint,compression,recordsize,atime,canmount "$ds"
+			confirm && sudo zfs allow -u "$user" receive,create,mount,mountpoint,compression,recordsize,atime,canmount "$ds"
+			;;
+		*)
+			usage_exit
+			;;
+	esac
 }
 
 while getopts "s" opt
@@ -39,6 +135,15 @@ case "$cmd" in
 	list_snap)
 		ds=$1
 		list_snap "$ds"
+		;;
+	list_ds)
+		list_ds "$@"
+		;;
+	grant)
+		grant "$@"
+		;;
+	*)
+		usage_exit
 		;;
 esac
 
