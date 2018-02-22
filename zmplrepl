@@ -94,7 +94,7 @@ run_command() {
 	local host=$1
 	shift
 	if [ -n "$host" ]; then
-		ssh ${sshopts} $host "$@"
+		ssh ${sshopts} "$host" "$@"
 	else
 		"$@"
 	fi
@@ -106,9 +106,9 @@ list_ds() {
 	local recursive=$3
 	if [ -n "$ds" ]; then
 		if [ $recursive -eq 1 ]; then
-			run_command "$host" zfs list -o name -H -t filesystem -r $ds 2>/dev/null
+			run_command "$host" zfs list -o name -H -t filesystem -r "$ds" 2>/dev/null
 		else
-			echo $ds
+			echo "$ds"
 		fi
 	fi
 }
@@ -126,7 +126,7 @@ u_list_snap() {
 	local host=$1
 	local ds=$2
 	if [ -n "$ds" ]; then
-		run_command -k "$SSHKEY" "$host" zmplhelper list_snap $ds
+		run_command -k "$SSHKEY" "$host" zmplhelper list_snap "$ds"
 	fi
 }
 
@@ -167,7 +167,7 @@ get_snap_ts() {
 	local host=$1
 	local fullsnap=$2
 	if [ -n "$fullsnap" ]; then
-		run_command "$host" zfs get -p -o value -H creation $fullsnap 2>/dev/null
+		run_command "$host" zfs get -p -o value -H creation "$fullsnap" 2>/dev/null
 	fi
 }
 
@@ -200,11 +200,11 @@ zfs_send_recv() {
 	u_list_snap "$dsthost" "$full_dstds" | filter_re "$SNAPFILTER" > "$TF_DSTSNAP" 2>/dev/null
 	u_list_snap "$srchost" "$srcds" | filter_re "$SNAPFILTER" > "$TF_SRCSNAP" 2>/dev/null
 
-	latest_common_snap=$(fgrep -x -f $TF_SRCSNAP $TF_DSTSNAP | tail -n 1)
-	latest_snap_on_dst=$(tail -n 1 $TF_DSTSNAP)
-	latest_snap_on_src=$(tail -n 1 $TF_SRCSNAP)
-	oldest_snap_on_dst=$(head -n 1 $TF_DSTSNAP)
-	oldest_snap_on_src=$(head -n 1 $TF_SRCSNAP)
+	latest_common_snap=$(fgrep -x -f "$TF_SRCSNAP" "$TF_DSTSNAP" | tail -n 1)
+	latest_snap_on_dst=$(tail -n 1 "$TF_DSTSNAP")
+	latest_snap_on_src=$(tail -n 1 "$TF_SRCSNAP")
+	oldest_snap_on_dst=$(head -n 1 "$TF_DSTSNAP")
+	oldest_snap_on_src=$(head -n 1 "$TF_SRCSNAP")
 
 	if [ -z "$oldest_snap_on_dst" ]; then
 		echov "Info: No dataset on the receiver. Turn on -F (full)."
@@ -243,7 +243,7 @@ zfs_send_recv() {
 			echo "Info: full."
 			echo "Info: ${srchost:+ssh }${srchost}${srchost:+ }zfs send $sendopts${sendopts:+ }$srcds@$latest_snap_on_src | ${dsthost:+ssh }${dsthost}${dsthost:+ }zfs recv $recvopts${recvopts:+ }$dstds" | tee -a $TF_CMDLIST
 			echov "==="
-			zfs_send "$srchost" $sendopts $srcds@$latest_snap_on_src | u_zfs_recv "$dsthost" $recvopts $dstds | sed -u 's/^/% /' 2>&1 | catv
+			zfs_send "$srchost" $sendopts "$srcds@$latest_snap_on_src" | u_zfs_recv "$dsthost" $recvopts "$dstds" | sed -u 's/^/% /' 2>&1 | catv
 			echo_result
 		else
 			echoerr  "Error: No snapshot for full stream on the sender."
@@ -257,8 +257,8 @@ zfs_send_recv() {
 				sendopts="${sendopts}${sendopts:+ }-i"
 				incrtype="incremental (-i)"
 			fi
-			common_snap_ts=$(get_snap_ts "$srchost" $srcds@$latest_common_snap)
-			latest_snap_ts=$(get_snap_ts "$srchost" $srcds@$latest_snap_on_src)
+			common_snap_ts=$(get_snap_ts "$srchost" "$srcds@$latest_common_snap")
+			latest_snap_ts=$(get_snap_ts "$srchost" "$srcds@$latest_snap_on_src")
 
 			echov "Info: Latest common snap = $latest_common_snap ($common_snap_ts)"
 			echov "Info: Latest snap on src = $latest_snap_on_src ($latest_snap_ts)"
@@ -269,7 +269,7 @@ zfs_send_recv() {
 				echo "Info: common($common_snap_ts) < latest($latest_snap_ts) -> $incrtype"
 				echo "Info: ${srchost:+ssh }${srchost}${srchost:+ }zfs send $sendopts${sendopts:+ }$latest_common_snap $srcds@$latest_snap_on_src | ${dsthost:+ssh }${dsthost}${dsthost:+ }zfs recv $recvopts${recvopts:+ }$dstds" | tee -a $TF_CMDLIST
 				echov "==="
-				zfs_send "$srchost" $sendopts $latest_common_snap $srcds@$latest_snap_on_src | u_zfs_recv "$dsthost" $recvopts $dstds | sed -u 's/^/% /' 2>&1 | catv
+				zfs_send "$srchost" $sendopts "$latest_common_snap" "$srcds@$latest_snap_on_src" | u_zfs_recv "$dsthost" $recvopts "$dstds" | sed -u 's/^/% /' 2>&1 | catv
 				echo_result
 
 			elif [ $common_snap_ts -eq $latest_snap_ts ]; then
@@ -397,7 +397,7 @@ if [ $? -ne 0 ]; then
 	err_exit "Error: Cannot create temporary files."
 fi
 
-SRCDS_LIST=$(list_ds "$srchost" $srcds $recursive)
+SRCDS_LIST=$(list_ds "$srchost" "$srcds" $recursive)
 if [ -z "$SRCDS_LIST" ]; then
 	err_exit "Error: No such srcDs [$srcds]${srchost:+ on}${srchost}."
 fi
