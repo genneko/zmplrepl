@@ -207,7 +207,7 @@ zfs_send_recv() {
 	oldest_snap_on_src=$(head -n 1 "$TF_SRCSNAP")
 
 	if [ -z "$oldest_snap_on_dst" ]; then
-		echov "Info: No dataset on the receiver. Turn on -F (full)."
+		echov "Info: No snapshot on the receiver. Turn on -F (full)."
 		fullstream=1
 	elif [ -z "$latest_common_snap" ]; then
 		echov "Info: No common snapshot. Turn on -F (full)."
