@@ -10,7 +10,7 @@ zfs_recv() {
 list_snap() {
 	local ds=$1
 	if [ -n "$ds" ]; then
-		zfs list -o name -H -t snapshot -r $ds | fgrep $ds@ | sed -e 's/.*@//'
+		zfs list -o name -H -t snapshot -r "$ds" | fgrep "$ds@" | sed -e 's/.*@//'
 	fi
 }
 
