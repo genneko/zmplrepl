@@ -71,6 +71,20 @@ Then send it as a full replication stream to the receiving host.
     repl@r$ sudo zfs set readonly=on backup/data
     ```
 
+## Automation
+- Sample authorized_keys on the receiving host.
+    ```
+    restrict,from="sender",command="/home/replicator/app/zmplrepl/zmplhelper -s" ssh-rsa AAAA.... replicator@receiver
+    ```
+
+- Sample crontab entry for the sending host.
+    ```
+    #
+    #Minute hour mday month wday user        command
+    #
+    42      0    *    *     *    replicator  /home/replicator/app/zmplrepl/zmplrepl -k /home/replicator/.ssh/id_rsa_zmplhelper_receiver -Rv zroot/data r:backup
+    ```
+
 ## Usage
 ```
 zmplrepl [-nvpIFRz] [-k KEYFILE] [-S RE]
