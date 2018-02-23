@@ -92,7 +92,7 @@ Then send it as a full replication stream to the receiving host.
     #
     #Minute hour mday month wday user        command
     #
-    42      0    *    *     *    repl  /home/repl/app/zmplrepl/zmplrepl -k /home/repl/.ssh/id_rsa_zmplhelper_receiver -Rv zroot/data r:backup
+    42      0    *    *     *    repl  /home/repl/app/zmplrepl/zmplrepl -k /home/repl/.ssh/id_rsa_zmplhelper_receiver -v zroot/data r:backup
     ```
 
 ## Usage
