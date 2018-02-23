@@ -2,6 +2,7 @@
 # vim: ft=sh
 PROG=$(basename $0)
 BINDIR=$(dirname $(readlink -f $0))
+export PATH="$PATH:$BINDIR"
 LOCKFILE="${TMPDIR:-/tmp}/$PROG.lck"
 DESCRIPTION="[SZ]imple ZFS Replicator"
 
@@ -412,7 +413,6 @@ echo "# ---------- ${PROG} ----------"
 echo "# started  at ${HR_BEGINTS} ($BEGINTS)"
 echo "# ---------- ${PROG} ----------"
 
-export PATH="$PATH:$BINDIR"
 for each_srcds in $SRCDS_LIST; do
 	zfs_send_recv "$srchost" "$each_srcds" "$fromsnap" "$tosnap" "$dsthost" "$dstds" $recursive $replication $fullstream
 done
