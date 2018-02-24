@@ -73,7 +73,7 @@ Then send it as a full replication stream to the receiving host.
 
     'zfs list' in the last line can be replaced with the zmplhelper utility.
     ```
-    repl@r$ zmplhelper list_ds -r backup/data | sudo xargs -n1 zfs mount
+    repl@r$ zmplhelper list dataset -r backup/data | sudo xargs -n1 zfs mount
     ```
 
     Optionally, you can make the datasets readonly to keep someone from accidentally changing their contents.
@@ -133,9 +133,9 @@ zmplrepl [-h]
 
 ### zmplhelper
 ```
-zmplhelper zfs_recv PARAMETERS...
-zmplhelper list_snap DATASET
-zmplhelper list_ds [-r] DATASET
+zmplhelper recv PARAMETERS...
+zmplhelper list snapshot [-l]  DATASET
+zmplhelper list dataset [-r] DATASET
 zmplhelper grant sender [-u USER] DATASET
 zmplhelper grant receiver [-u USER] DATASET
 ```
