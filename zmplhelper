@@ -9,27 +9,48 @@ echoerr() {
 
 usage_exit() {
 	echoerr "[USAGE]"
-	echoerr "$PROG zfs_recv PARAMETERS..."
-	echoerr "$PROG list_snap DATASET"
-	echoerr "$PROG list_ds [-r] DATASET"
+	echoerr "$PROG recv PARAMETERS..."
+	echoerr "$PROG list snapshot [-l] DATASET"
+	echoerr "$PROG list dataset [-r] DATASET"
 	echoerr "$PROG grant sender [-u USER] DATASET"
 	echoerr "$PROG grant receiver [-u USER] DATASET"
 	echoerr
 	exit 1
 }
 
-zfs_recv() {
+recv() {
 	zfs receive "$@"
 }
 
-list_snap() {
-	local ds=$1
-	if [ -n "$ds" ]; then
-		zfs list -o name -H -t snapshot -r "$ds" | fgrep "$ds@" | sed -e 's/.*@//'
+extract_snapshot_name() {
+	local longname=$1
+	if [ $longname -eq 0 ]; then
+		sed -e 's/.*@//'
+	else
+		cat
 	fi
 }
 
-list_ds() {
+list_snapshot() {
+	local OPTIND
+	local longname=0
+	while getopts "l" opt
+	do
+		case "$opt" in
+			l)
+				longname=1
+				;;
+		esac
+	done
+	shift $(( $OPTIND - 1 ))
+
+	local ds=$1
+	if [ -n "$ds" ]; then
+		zfs list -o name -H -t snapshot -r "$ds" | fgrep "$ds@" | extract_snapshot_name $longname
+	fi
+}
+
+list_dataset() {
 	local OPTIND
 	local recursive=0
 	while getopts "r" opt
@@ -129,15 +150,23 @@ cmd=$1
 shift
 
 case "$cmd" in
-	zfs_recv)
-		zfs_recv "$@"
+	recv)
+		recv "$@"
 		;;
-	list_snap)
-		ds=$1
-		list_snap "$ds"
-		;;
-	list_ds)
-		list_ds "$@"
+	list)
+		what=$1
+		shift
+		case "$what" in
+			snapshot)
+				list_snapshot "$@"
+				;;
+			dataset)
+				list_dataset "$@"
+				;;
+			*)
+				usage_exit
+				;;
+		esac
 		;;
 	grant)
 		grant "$@"

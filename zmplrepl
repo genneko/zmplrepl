@@ -114,7 +114,7 @@ u_list_snap() {
 	local host=$1
 	local ds=$2
 	if [ -n "$ds" ]; then
-		run_command -k "$SSHKEY" "$host" zmplhelper list_snap "$ds"
+		run_command -k "$SSHKEY" "$host" zmplhelper list snapshot "$ds"
 	fi
 }
 
@@ -127,7 +127,7 @@ u_list_ds() {
 		opts="-r"
 	fi
 	if [ -n "$ds" ]; then
-		run_command -k "$SSHKEY" "$host" zmplhelper list_ds $opts "$ds"
+		run_command -k "$SSHKEY" "$host" zmplhelper list dataset $opts "$ds"
 	fi
 }
 
@@ -143,7 +143,7 @@ u_zfs_recv() {
 	if [ -n "$DRYRUN" ]; then
 		cat
 	else
-		run_command -k "$SSHKEY" "$host" zmplhelper zfs_recv "$@"
+		run_command -k "$SSHKEY" "$host" zmplhelper recv "$@"
 	fi
 }
 
