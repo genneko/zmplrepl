@@ -30,12 +30,12 @@ Assume you want to replicate zroot/data and all its descendant datasets on the s
 You can achieve this by taking the following steps.
 
 1. Create a dedicated user on both sending and receiving hosts.  
-It's optional but recommended in production environment.
+It's optional but recommended in a production environment.
 
-2. Generate a SSH public key for the sending user.  
-Then put it into the receiving user's ~/.ssh/authorized_keys.
+2. Generate a SSH keypair for the sending user.  
+Then put the public key into the receiving user's ~/.ssh/authorized_keys.
 
-3. Create a base dataset with -u (unmounted) on the receiving host.  
+3. Create a base dataset with -u (unmounted) flag on the receiving host.  
     ```
     repl@r$ sudo zfs create -u backup/data
     ```
@@ -45,7 +45,7 @@ Then put it into the receiving user's ~/.ssh/authorized_keys.
     repl@s$ sudo zfs allow -u repl send,snapshot,hold zroot/data
     repl@r$ sudo zfs allow -u repl receive,create,mount,mountpoint,compression,recordsize,atime,canmount backup/data
     ```
-    Also, these operations can be done with the zmplhelper utility.
+    Alternatively, you can perform the same operations with the zmplhelper utility as follows.
     ```
     repl@s$ zmplhelper grant sender zroot/data
     repl@r$ zmplhelper grant receiver zroot/data
@@ -64,14 +64,14 @@ Then send it as a full replication stream to the receiving host.
     repl@s$ zmplrepl zroot/data r:backup
     ```
 
-7. If you want to mount the replicated datasets on the receiving host, run the following command after examing and correcting properties such as mountpoint.
+7. If you want to mount the replicated datasets on the receiving host, run 'zfs mount' after examing and correcting properties such as mountpoint.
     ```
     repl@r$ zfs list -o name,mountpoint -r backup/data
     repl@r$ zfs set mountpoint=... (If required)
     repl@r$ zfs list -o name -H -r backup/data | sudo xargs -n1 zfs mount
     ```
 
-    'zfs list' in the last line can be replaced with the zmplhelper utility.
+    You can use the zmplhelper instead of 'zfs list' in the last line.
     ```
     repl@r$ zmplhelper list dataset -r backup/data | sudo xargs -n1 zfs mount
     ```
