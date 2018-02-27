@@ -133,8 +133,10 @@ zmplrepl [-h]
 
 ### zmplhelper
 ```
+zmplhelper send PARAMETERS...
 zmplhelper recv PARAMETERS...
-zmplhelper list snapshot [-l]  DATASET
+zmplhelper get [-p] PROPERTY DATASET
+zmplhelper list snapshot [-l] DATASET
 zmplhelper list dataset [-r] DATASET
 zmplhelper grant sender [-u USER] DATASET
 zmplhelper grant receiver [-u USER] DATASET
