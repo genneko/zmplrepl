@@ -9,7 +9,9 @@ echoerr() {
 
 usage_exit() {
 	echoerr "[USAGE]"
+	echoerr "$PROG send PARAMETERS..."
 	echoerr "$PROG recv PARAMETERS..."
+	echoerr "$PROG get [-p] PROPERTY DATASET"
 	echoerr "$PROG list snapshot [-l] DATASET"
 	echoerr "$PROG list dataset [-r] DATASET"
 	echoerr "$PROG grant sender [-u USER] DATASET"
@@ -18,8 +20,32 @@ usage_exit() {
 	exit 1
 }
 
+send() {
+	zfs send "$@"
+}
+
 recv() {
 	zfs receive "$@"
+}
+
+get() {
+	local OPTIND
+	local opts
+	while getopts "p" opt
+	do
+		case "$opt" in
+			p)
+				opts="$opts${opts:+ }-p"
+				;;
+		esac
+	done
+	shift $(( $OPTIND - 1 ))
+
+	local property=$1
+	local fullsnap=$2
+	if [ -n "$property" -a -n "$fullsnap" ]; then
+		zfs get $opts -o value -H $property "$fullsnap"
+	fi
 }
 
 extract_snapshot_name() {
@@ -150,8 +176,14 @@ cmd=$1
 shift
 
 case "$cmd" in
+	send)
+		send "$@"
+		;;
 	recv)
 		recv "$@"
+		;;
+	get)
+		get "$@"
 		;;
 	list)
 		what=$1
