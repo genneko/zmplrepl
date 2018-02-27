@@ -99,9 +99,9 @@ Then send it as a full replication stream to the receiving host.
 ### zmplrepl
 ```
 zmplrepl [-nvpIFRz] [-k KEYFILE] [-S RE]
-         [-f fromSnap] srcDs[@toSnap] [host:]dstDs(base)
+         [-f fromSnap] [host:]srcDs[@toSnap] [host:]dstDs(base)
 zmplrepl [-nvpIFz] -s [-k KEYFILE] [-S RE]
-         [-f fromSnap] srcDs[@toSnap] [host:]dstDs
+         [-f fromSnap] [host:]srcDs[@toSnap] [host:]dstDs
 zmplrepl [-h]
 
   -n: Dry-run (zfs send -nv).
