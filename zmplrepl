@@ -118,15 +118,34 @@ u_list_snap() {
 	fi
 }
 
+path2file() {
+        local path=$1
+        local basename=$2
+        if [ -n "$path" -a -n "$basename" ]; then
+                echo "${basename}-$(echo $path | sed 's/\//_/g')"
+        fi
+}
+
+file2path() {
+        local file=$1
+        local basename=$2
+        if [ -n "$file" -a -n "$basename" ]; then
+                echo "${file#$basename-}" | sed 's/_/\//g'
+        fi
+}
+
 u_list_ds() {
 	local host=$1
 	local ds=$2
-	local recursive=$3
+	local file=$3
+	local recursive=$4
 	local opts
 	if [ $recursive -eq 1 ]; then
 		opts="-r"
 	fi
-	if [ -n "$ds" ]; then
+	if [ -n "$file" ]; then
+		run_command -k "$SSHKEY" "$host" zmplhelper list file $opts "$file"
+	elif [ -n "$ds" ]; then
 		run_command -k "$SSHKEY" "$host" zmplhelper list dataset $opts "$ds"
 	fi
 }
@@ -178,9 +197,12 @@ zfs_send_recv() {
 	local tosnap=$4
 	local dsthost=$5
 	local dstds=$6
-	local recursive=$7
-	local replication=$8
-	local fullstream=$9
+	local srcfile=$7
+	local dstfile=$8
+
+	local recursive=$RECURSIVE
+	local replication=$REPLICATION
+	local fullstream=$FULLSTREAM
 
 	local sendopts recvopts
 	local latest_common_snap latest_snap_on_dst latest_snap_on_src
@@ -285,21 +307,34 @@ zfs_send_recv() {
 	fi
 }
 
+#
+# Expected input syntax:
+#   [host:]path@snapshot
+#
+#     path is either ZFS dataset or full file path.
+#     If a path contains @, it is assumed as a dataset.
+#     Otherwise, if it begins with a /, it is regarded as a file path.
+#
 parse_target() {
 	t_origtarget=$1
+	t_hostname=
+	t_fullpath=
+	t_dataset=
+	t_snapshot=
+	t_filepath=
 	if echo "$t_origtarget" | fgrep -q ':'; then
 		t_hostname=${t_origtarget%%:*}
 		t_fullpath=${t_origtarget#*:}
 	else
-		t_hostname=
 		t_fullpath=${t_origtarget}
 	fi
 	if echo "$t_fullpath" | fgrep -q '@'; then
 		t_dataset=${t_fullpath%%@*}
 		t_snapshot=${t_fullpath#*@}
+	elif echo "$t_fullpath" | grep -q ^/; then
+		t_filepath=${t_fullpath}
 	else
 		t_dataset=${t_fullpath}
-		t_snapshot=
 	fi
 }
 
@@ -345,10 +380,10 @@ PRESERVEPROP=0
 DENSEMODE=0
 SSHKEY=
 SNAPFILTER=
-fullstream=0
+FULLSTREAM=0
 fromsnap=
-recursive=1
-replication=0
+RECURSIVE=1
+REPLICATION=0
 while getopts "nvpIk:S:zFf:sRh" opt
 do
 	case "$opt" in
@@ -359,10 +394,10 @@ do
 		k) SSHKEY="${OPTARG}" ;;
 		S) SNAPFILTER="$OPTARG" ;;
 		z) SNAPFILTER="zfs-auto-snap_(daily|weekly|monthly)" ;;
-		F) fullstream=1 ;;
+		F) FULLSTREAM=1 ;;
 		f) fromsnap="$OPTARG" ;;
-		s) recursive=0 ;;
-		R) replication=1 ; recursive=0 ;;
+		s) RECURSIVE=0 ;;
+		R) REPLICATION=1 ; RECURSIVE=0 ;;
 		h) usage_exit ;;
 		*) usage_exit ;;
 	esac
@@ -376,13 +411,20 @@ parse_target "$_srcds_tosnap"
 srchost=$t_hostname
 srcds=$t_dataset
 tosnap=$t_snapshot
+srcfile=$t_filepath
+BASESRCFILE=$t_filepath
 
 parse_target "$_target"
 dsthost=$t_hostname
 dstds=$t_dataset
+dstfile=$t_filepath
 
-if [ -z "$srcds" -o -z "$dstds" ]; then
-	usage_exit
+if [ -z "$srcds" -a -z "$srcfile" ]; then
+	usage_exit "Error: source dataset or filepath is not specified."
+elif [ -z "$dstds" -a -z "$dstfile" ]; then
+	usage_exit "Error: destination dataset or filepath is not specified."
+elif [ -n "$srcfile" -a -n "$dstfile" ]; then
+	usage_exit "Error: Specifying files for both source and destination doesn't make any sense."
 fi
 
 #
@@ -397,9 +439,13 @@ if [ $? -ne 0 ]; then
 	err_exit "Error: Cannot create temporary files."
 fi
 
-SRCDS_LIST=$(u_list_ds "$srchost" "$srcds" $recursive)
+SRCDS_LIST=$(u_list_ds "$srchost" "$srcds" "$srcfile" $RECURSIVE)
 if [ -z "$SRCDS_LIST" ]; then
-	err_exit "Error: No such srcDs [$srcds]${srchost:+ on}${srchost}."
+	if [ -n "$srcfile" ]; then
+		err_exit "Error: No such srcFile [$srcfile]${srchost:+ on }${srchost}."
+	else
+		err_exit "Error: No such srcDs [$srcds]${srchost:+ on }${srchost}."
+	fi
 fi
 
 BEGINTS=$(date '+%s')
@@ -413,7 +459,7 @@ echo "# started  at ${HR_BEGINTS} ($BEGINTS)"
 echo "# ---------- ${PROG} ----------"
 
 for each_srcds in $SRCDS_LIST; do
-	zfs_send_recv "$srchost" "$each_srcds" "$fromsnap" "$tosnap" "$dsthost" "$dstds" $recursive $replication $fullstream
+	zfs_send_recv "$srchost" "$each_srcds" "$fromsnap" "$tosnap" "$dsthost" "$dstds" "$srcfile" "$dstfile"
 done
 
 ENDTS=$(date '+%s')
