@@ -95,6 +95,18 @@ Then send it as a full replication stream to the receiving host.
     42      0    *    *     *    repl  /home/repl/app/zmplrepl/zmplrepl -k /home/repl/.ssh/id_rsa_zmplhelper_receiver -v zroot/data r:backup
     ```
 
+- If you are using [zfstools](https://github.com/bdrewery/zfstools) for automatic snapshotting, you may want to use --keep-zero-sized-snapshots (-k) option because it makes you cry when you see the previously used snapshots were deleted on the sending host and no common snapshots are left between the sender and receiver.
+
+    The following crontab fragment shows a way to keep daily/weekly/monthly snapshots from being deleted even if they are empty.
+    ```
+    PATH=/etc:/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin
+    15,30,45 * * * * root /usr/local/sbin/zfs-auto-snapshot    15min     4
+    0        * * * * root /usr/local/sbin/zfs-auto-snapshot    hourly   24
+    7        0 * * * root /usr/local/sbin/zfs-auto-snapshot -k daily     7
+    14       0 * * 7 root /usr/local/sbin/zfs-auto-snapshot -k weekly    4
+    28       0 1 * * root /usr/local/sbin/zfs-auto-snapshot -k monthly  12
+    ```
+
 ## Usage
 ### zmplrepl
 ```
